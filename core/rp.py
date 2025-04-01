@@ -72,7 +72,7 @@ class rp_system():
             porb = [0.3,0.3,0.3,0.1]
             final_msg += self.random_choice(banner, porb)[0]
 
-        # if not self.refresh:
-        #     self.update_rp()
+        if not self.refresh:
+            self.update_rp()
 
         return final_msg
