@@ -12,11 +12,13 @@ class food_system():
         return
     
     def load_data(self):
-        self.food = json.load(open(self.file_path, 'r', encoding='utf-8'))
+        with open(self.file_path, 'r', encoding='utf-8') as f:
+            self.food = json.load(f)
         return
     
     def save_data(self):
-        json.dump(self.food, open(self.file_path, 'w', encoding='utf-8'))
+        with open(self.file_path, 'w', encoding='utf-8') as f:
+            json.dump(self.food, f, ensure_ascii=False, indent=4)
         return
 
     def get_hour_time(self):
@@ -45,7 +47,7 @@ class food_system():
         return message.index(string)
         
     def show_all_food(self):
-        message = ""
+        message = "\n"
         for time in self.food.keys():
             message += str(time) + ':\n'
             for food in self.food[time]:
@@ -64,21 +66,35 @@ class food_system():
         return message
 
     def add_food(self, data):
-        time, food = self.get_time_segmentation_inv(data[:2]), data[2:]
-        if time == None:
-            return 'ERROR'
-        all_food = self.load_data()
-        if (food, time) in all_food:
-            return '这个食物已经添加过了哦~'
-        all_food[time].append(food)
-        return f'新的{data}已添加！'
+        time_str = data[:2]
+        food_name = data[2:]
+        time = self.get_time_segmentation_inv(time_str)
+        
+        if time is None:
+            return f'时间段"{time_str}"无效，请使用：零食/早餐/午餐/晚餐/夜宵'
+            
+        time_key = self.get_time_segmentation(time)
+        
+        if food_name in self.food[time_key]:
+            return f'{time_key}"{food_name}"已经存在啦~'
+            
+        self.food[time_key].append(food_name)
+        self.save_data()
+        return f'新的{time_key}"{food_name}"已添加！'
     
     def remove_food(self, data):
-        time, food = self.get_time_segmentation_inv(data[:2]), data[2:]
-        if time == None:
-            return 'ERROR'
-        all_food = self.load_data()
-        if (food, time) not in all_food:
-            return '好像本来就没有？'
-        all_food[time].remove(food)
-        return f'{data}已经去掉啦~'
+        time_str = data[:2]
+        food_name = data[2:]
+        time = self.get_time_segmentation_inv(time_str)
+        
+        if time is None:
+            return f'时间段"{time_str}"无效，请使用：零食/早餐/午餐/晚餐/夜宵'
+            
+        time_key = self.get_time_segmentation(time)
+        
+        if food_name not in self.food[time_key]:
+            return f'{time_key}"{food_name}"不在列表中，无法删除'
+            
+        self.food[time_key].remove(food_name)
+        self.save_data()
+        return f'{time_key}"{food_name}"已成功删除~'
