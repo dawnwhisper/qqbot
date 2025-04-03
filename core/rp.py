@@ -2,12 +2,28 @@ import random
 import datetime
 import threading
 import json
+import os
 from core.my_random import random_choice as choice
+from botpy import logging
+
+# 获取日志记录器
+_log = logging.get_logger()
 
 class rp_system():
     def __init__(self):
         self.file_path = 'data/rp.json'
-        self.refresh = False
+        self.last_reset_date_file = 'data/rp_last_reset.txt'
+        
+        # 确保数据文件存在
+        os.makedirs('data', exist_ok=True)
+        if not os.path.exists(self.file_path):
+            self.clear_rp()
+        
+        # 检查是否需要重置
+        self.check_reset_date()
+        
+        # 设置定时器
+        self.schedule_next_reset()
         return
 
     def random_choice(self, seq, prob, k=1):
@@ -16,30 +32,75 @@ class rp_system():
     def clear_rp(self) -> None:
         self.refresh = False
         json.dump({}, open(self.file_path, 'w', encoding='utf-8'))
+        # 保存重置日期
+        with open(self.last_reset_date_file, 'w') as f:
+            f.write(datetime.datetime.now().strftime("%Y-%m-%d"))
         return
 
-    def update_rp(self) -> None:
-        self.refresh = True
-        now_time = datetime.datetime.now()
-        next_time = now_time + datetime.timedelta(days=+1)
-        next_year = next_time.date().year
-        next_month = next_time.date().month
-        next_day = next_time.date().day
-        next_time = datetime.datetime.strptime(str(next_year)+"-"+str(next_month)+"-"+str(next_day)+" 00:00:00", "%Y-%m-%d %H:%M:%S")
-        timer_start_time = (next_time - now_time).total_seconds()
-        timer = threading.Timer(timer_start_time, self.Clear_RP)
+    def check_reset_date(self) -> None:
+        """检查是否需要重置 RP 数据"""
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        
+        # 如果上次重置日期文件不存在或日期不是今天，则重置
+        if not os.path.exists(self.last_reset_date_file):
+            self.clear_rp()
+            return
+            
+        with open(self.last_reset_date_file, 'r') as f:
+            last_date = f.read().strip()
+            
+        if last_date != today:
+            self.clear_rp()
+
+    def schedule_next_reset(self) -> None:
+        """调度下一次重置的时间"""
+        now = datetime.datetime.now()
+        tomorrow = now + datetime.timedelta(days=1)
+        next_reset = datetime.datetime(
+            year=tomorrow.year,
+            month=tomorrow.month,
+            day=tomorrow.day,
+            hour=0,
+            minute=0,
+            second=0
+        )
+        
+        delay = (next_reset - now).total_seconds()
+        timer = threading.Timer(delay, self._reset_callback)
+        timer.daemon = True  # 设置为守护线程，这样程序退出时线程也会退出
         timer.start()
+        
+        # 将输出添加到日志中
+        _log.info(f"下一次 RP 值重置时间: {next_reset}, 还有 {delay:.1f} 秒")
+        self.refresh = True
         return
+
+    def _reset_callback(self) -> None:
+        """定时器回调函数"""
+        self.clear_rp()
+        _log.info("RP 值已重置")
+        self.schedule_next_reset()  # 重新调度下一次重置
 
     def get_rp(self, uid) -> int:
-        rp_data = json.load(open(self.file_path, 'r', encoding='utf-8'))
-        if uid in rp_data:
-            return rp_data[uid]
-        else:
-            value = self.random_choice([random.randint(0,100),114514],[0.95,0.05])[0]
+        # 确保已检查过是否需要重置
+        if not hasattr(self, 'refresh') or not self.refresh:
+            self.check_reset_date()
+        
+        # 读取 RP 数据
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                rp_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            rp_data = {}
+            
+        # 如果用户 ID 不存在，生成新的 RP 值
+        if uid not in rp_data:
+            value = self.random_choice([random.randint(0,100), 114514], [0.95, 0.05])[0]
             rp_data[uid] = value
-            json.dump(rp_data, open(self.file_path, 'w', encoding='utf-8'))
-            return rp_data[uid]
+            with open(self.file_path, 'w', encoding='utf-8') as f:
+                json.dump(rp_data, f)
+                
+        return rp_data[uid]
     
     def get_rp_final(self, uid) -> str:
         rp = self.get_rp(uid)
